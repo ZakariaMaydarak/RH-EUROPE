@@ -20,6 +20,11 @@ jobs:
       - name: Syntaxe Python du serveur
         run: python -m compileall -q serveur
 
+      - name: Tests du serveur (portail simule)
+        run: |
+          pip install Flask==3.0.3 openpyxl==3.1.5 tzdata
+          python serveur/RHEUROPE/tests/test_rheurope.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

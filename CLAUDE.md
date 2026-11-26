@@ -29,6 +29,43 @@ App Service, connexion Microsoft Entra ID par Easy Auth). Lire aussi `README.md`
     lisent par `os.environ`.
 - Interface en **français**, couleurs de la charte Adagio (magenta `#FF0050`).
 
+## HR EUROPE — fonctionnement (v1.0.0, nov. 2026)
+
+Référentiel unique des collaborateurs des hôtels Adagio en Europe (Employee Master Data).
+
+- **Rôles internes** (`role_schema`, champ de périmètre `sites`) : `admin` (Europe entière,
+  référentiels, paramètres, utilisateurs, exports, qualité), `gm` (ses établissements),
+  `aucun`. 1re connexion (`routes.regle_defaut`) : App.Admin → admin ; `hXXXX@…` → gm sur
+  HXXXX ; sinon aucun. Gérés aussi dans l'app (page Utilisateurs, via `shared.role_store`).
+  Dev local : `RHEUROPE_DEV_ROLE` / `RHEUROPE_DEV_SITES` simulent un profil.
+- **Modules** (`serveur/RHEUROPE/`) : `store.py` (JSON atomiques + historique JSON Lines),
+  `referentiels.py` (listes par défaut, contrôle des listes), `validation.py` (contrôles
+  bloquants + alertes, génération de matricule), `service.py` (règles métier, historique),
+  `indicateurs.py` (tableau de bord, qualité), `export.py` (Excel / CSV standardisés),
+  `routes.py` (API, droits, planificateur). `validation`, `service`, `indicateurs`,
+  `export` ne dépendent ni de Flask ni du portail.
+- **Données** (DATA_DIR/RHEUROPE) : `collaborateurs.json`, `referentiels.json`,
+  `parametres.json`, `automatisation.json`, `historique.jsonl` (audit : qui, quand, quoi,
+  avant → après).
+- **Contrôles bloquants** : complétude (date de fin seulement si le type de contrat
+  l'exige ; manager facultatif pour un poste `sans_manager`), unicité Europe du matricule
+  et de l'e-mail, format + domaine (`parametres.domaines_email`, sous-domaines acceptés)
+  + adresse nominative, valeurs des référentiels actives, périmètre du GM, cohérence des
+  dates (âge 14-80 ans au début, fin ≥ début, naissance non future), manager actif sans
+  boucle. **Doublon potentiel** (nom + prénom + date de naissance, sans accents) : 409 tant
+  que `confirmer_doublon` n'est pas envoyé.
+- **Statut** : désactivation manuelle (date de sortie + motif ; date future = sortie
+  programmée, date de fin positionnée), réactivation (nouvelle date de fin ≥ aujourd'hui
+  ou aucune), désactivation automatique quotidienne (APScheduler, 01:05 Europe/Paris,
+  `RHEUROPE_AUTOMATISATION_HEURE/MINUTE`, `RHEUROPE_AUTOMATISATION=0` pour couper,
+  rattrapage 45 s après le démarrage) quand date de fin < aujourd'hui. Effacement RGPD
+  (admin, saisie « EFFACER ») : fiche supprimée, historique anonymisé.
+- **Matricule** : modèle configurable (`{PAYS}`, `{ETAB}`, `{AAAA}`, `{AA}`, `{N}`),
+  compteur par préfixe réservé à chaque génération, matricules existants sautés.
+- **Exports** (admin) : `GET /api/export?format=xlsx|csv&pays=&etablissement=&service=&type_contrat=&statut=`
+  (listes séparées par des virgules), 27 colonnes fixes (`export.COLONNES`), tracés.
+- Tests : `python serveur/RHEUROPE/tests/test_rheurope.py` (portail simulé, aussi en CI).
+
 ## Ce qu'on ne fait JAMAIS depuis ce dépôt
 
 - Modifier le dépôt `portail-apps` (le portail), ses fichiers `shared/`, ses
