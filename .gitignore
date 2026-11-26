@@ -1,0 +1,13 @@
+# Dépendances et builds (régénérés)
+node_modules/
+front/dist/
+serveur/*/static_files/
+serveur/*/_vendor/
+deploiement/sortie/
+__pycache__/
+*.pyc
+.venv/
+# Données locales de test et secrets
+data/
+.env
+*.zip
