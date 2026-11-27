@@ -7,6 +7,7 @@ from collections import Counter
 from datetime import timedelta
 
 from . import referentiels as R
+from .i18n import _
 from .validation import CHAMPS, cle_doublon, date_iso, domaine_autorise
 
 JOURS_ARRIVEES = 30
@@ -27,7 +28,7 @@ def _resume(c, idx, date_cle=None):
 
 def _repartition(actifs, idx, type_, champ):
     compte = Counter(c.get(champ) or "" for c in actifs)
-    return sorted(({"code": code, "libelle": R.libelle(idx, type_, code) if code else "Non renseigné", "nb": nb}
+    return sorted(({"code": code, "libelle": R.libelle(idx, type_, code) if code else _("Non renseigné"), "nb": nb}
                    for code, nb in compte.items()), key=lambda x: (-x["nb"], x["libelle"]))
 
 
@@ -108,7 +109,7 @@ def qualite(collaborateurs, refs, parametres, aujourd_hui):
         if len(membres) > 1:
             for c in membres:
                 autres = ", ".join(x.get("matricule") or "?" for x in membres if x is not c)
-                res["doublons"].append(item(c, f"Mêmes informations que : {autres}"))
+                res["doublons"].append(item(c, _("Mêmes informations que : {autres}", autres=autres)))
 
     domaines = parametres.get("domaines_email") or []
     for c in collaborateurs:
@@ -122,21 +123,21 @@ def qualite(collaborateurs, refs, parametres, aujourd_hui):
                 continue
             if champ == "manager_id" and poste.get("sans_manager"):
                 continue
-            manquants.append(lib)
+            manquants.append(_(lib))
         if manquants:
-            res["incomplets"].append(item(c, "Manquant : " + ", ".join(manquants)))
+            res["incomplets"].append(item(c, _("Manquant : {champs}", champs=", ".join(manquants))))
 
         if c.get("statut") == "actif":
             fin = date_iso(c.get("date_fin"))
             if fin and fin < aujourd_hui:
-                res["echus_actifs"].append(item(c, f"Fin de contrat le {fin.strftime('%d/%m/%Y')}"))
+                res["echus_actifs"].append(item(c, _("Fin de contrat le {date}", date=fin.strftime("%d/%m/%Y"))))
             mid = c.get("manager_id")
             if mid:
                 m = par_id.get(mid)
                 if m is None:
-                    res["manager_inactif"].append(item(c, "Manager supprimé de la base"))
+                    res["manager_inactif"].append(item(c, _("Manager supprimé de la base")))
                 elif m.get("statut") != "actif":
-                    res["manager_inactif"].append(item(c, f"Manager inactif : {m.get('prenom')} {m.get('nom')}"))
+                    res["manager_inactif"].append(item(c, _("Manager inactif : {nom}", nom=f"{m.get('prenom')} {m.get('nom')}")))
 
         problemes = []
         for type_, champ in R.CHAMP_COLLABORATEUR.items():
@@ -145,9 +146,9 @@ def qualite(collaborateurs, refs, parametres, aujourd_hui):
                 continue
             e = idx[type_].get(code)
             if e is None:
-                problemes.append(f"{R.TYPES[type_]} « {code} » inconnu")
+                problemes.append(_("{type} « {code} » inconnu", type=_(R.TYPES[type_]), code=code))
             elif not e.get("actif", True) and c.get("statut") == "actif":
-                problemes.append(f"{R.TYPES[type_]} « {e['libelle']} » désactivé")
+                problemes.append(_("{type} « {libelle} » désactivé", type=_(R.TYPES[type_]), libelle=R.libelle(idx, type_, code)))
         if problemes:
             res["referentiel"].append(item(c, " ; ".join(problemes)))
 
@@ -155,7 +156,7 @@ def qualite(collaborateurs, refs, parametres, aujourd_hui):
             res["email_domaine"].append(item(c, c["email"]))
 
     return {
-        "controles": [{"code": k, "libelle": lib, "nb": len(res[k]), "elements": res[k][:300]}
+        "controles": [{"code": k, "libelle": _(lib), "nb": len(res[k]), "elements": res[k][:300]}
                       for k, lib in CONTROLES.items()],
         "total_collaborateurs": len(collaborateurs),
         "fiches_conformes": len(collaborateurs) - len({x["id"] for v in res.values() for x in v}),

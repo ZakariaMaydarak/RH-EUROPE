@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from . import referentiels as R
 from . import store as S
+from .i18n import _
 from .validation import CHAMPS, CHAMPS_SAISIS, LIBELLES, date_iso, generer_matricule, normaliser, verifier
 
 FUSEAU = ZoneInfo("Europe/Paris")
@@ -70,7 +71,7 @@ def _valeur_lisible(champ, valeur, idx, par_id):
         return ""
     type_ = next((t for t, ch in R.CHAMP_COLLABORATEUR.items() if ch == champ), None)
     if type_:
-        return R.libelle(idx, type_, valeur)
+        return R.libelle(idx, type_, valeur, base=True)   # historique : libellé de référence
     if champ == "manager_id":
         m = par_id.get(valeur) or {}
         return f"{m.get('prenom', '')} {m.get('nom', '')}".strip() or valeur
@@ -127,10 +128,10 @@ def _controler(c, tous, store, perimetre, ancien, confirmer_doublon):
     erreurs, alertes = verifier(c, collaborateurs=tous, refs=refs(store), parametres=parametres(store),
                                 aujourd_hui=aujourd_hui(), perimetre=perimetre, ancien=ancien)
     if erreurs:
-        raise ErreurMetier("La fiche contient des erreurs : corrigez-les avant d'enregistrer.", 400,
+        raise ErreurMetier(_("La fiche contient des erreurs : corrigez-les avant d'enregistrer."), 400,
                            erreurs=erreurs, alertes=alertes)
     if any(a["type"] == "doublon" for a in alertes) and not confirmer_doublon:
-        raise ErreurMetier("Doublon potentiel détecté : confirmez qu'il s'agit bien d'une autre personne.", 409,
+        raise ErreurMetier(_("Doublon potentiel détecté : confirmez qu'il s'agit bien d'une autre personne."), 409,
                            erreurs={}, alertes=alertes)
     return alertes
 
@@ -157,7 +158,7 @@ def creer(store, brut, ident, perimetre, confirmer_doublon=False):
 def _trouver(tous, id_, perimetre):
     c = next((x for x in tous if x["id"] == id_), None)
     if c is None or not dans_perimetre(c, perimetre):
-        raise ErreurMetier("Collaborateur introuvable ou hors de votre périmètre.", 404)
+        raise ErreurMetier(_("Collaborateur introuvable ou hors de votre périmètre."), 404)
     return c
 
 
@@ -190,18 +191,18 @@ def desactiver(store, id_, ident, perimetre, date_sortie=None, motif=None, comme
         tous = collaborateurs(store)
         ancien = _trouver(tous, id_, perimetre)
         if ancien.get("statut") != "actif":
-            raise ErreurMetier("Ce collaborateur est déjà inactif.")
+            raise ErreurMetier(_("Ce collaborateur est déjà inactif."))
         idx = R.index(refs(store))
         motif = (motif or "").strip().upper()
         if motif not in idx["motifs_sortie"]:
-            raise ErreurMetier("Motif de sortie obligatoire.", erreurs={"motif_sortie": "Choisissez un motif."})
+            raise ErreurMetier(_("Motif de sortie obligatoire."), erreurs={"motif_sortie": _("Choisissez un motif.")})
         jour = date_iso(date_sortie) if date_sortie else aujourd_hui()
         if jour is None:
-            raise ErreurMetier("Date de sortie invalide.", erreurs={"date_sortie": "Date invalide."})
+            raise ErreurMetier(_("Date de sortie invalide."), erreurs={"date_sortie": _("Date invalide.")})
         debut = date_iso(ancien.get("date_debut"))
         if debut and jour < debut:
-            raise ErreurMetier("La date de sortie précède la date de début de contrat.",
-                               erreurs={"date_sortie": "Antérieure au début du contrat."})
+            raise ErreurMetier(_("La date de sortie précède la date de début de contrat."),
+                               erreurs={"date_sortie": _("Antérieure au début du contrat.")})
         nouveau = dict(ancien)
         fin = date_iso(ancien.get("date_fin"))
         if fin is None or fin > jour:
@@ -228,23 +229,23 @@ def reactiver(store, id_, ident, perimetre, brut=None):
         tous = collaborateurs(store)
         ancien = _trouver(tous, id_, perimetre)
         if ancien.get("statut") == "actif":
-            raise ErreurMetier("Ce collaborateur est déjà actif.")
+            raise ErreurMetier(_("Ce collaborateur est déjà actif."))
         proposition = {k: ancien.get(k, "") for k in CHAMPS_SAISIS}
         for cle in ("type_contrat", "date_debut", "date_fin"):
             if cle in brut:
                 proposition[cle] = brut.get(cle) or ""
         c = normaliser(proposition)
-        erreurs, _ = verifier(c, collaborateurs=tous, refs=refs(store), parametres=parametres(store),
+        erreurs, _alertes = verifier(c, collaborateurs=tous, refs=refs(store), parametres=parametres(store),
                               aujourd_hui=aujourd_hui(), perimetre=perimetre, ancien=ancien)
         fin = date_iso(c.get("date_fin"))
         if fin and fin < aujourd_hui() and "date_fin" not in erreurs:
-            erreurs["date_fin"] = "Indiquez une nouvelle date de fin (aujourd'hui ou plus tard), ou laissez vide pour un contrat sans fin."
+            erreurs["date_fin"] = _("Indiquez une nouvelle date de fin (aujourd'hui ou plus tard), ou laissez vide pour un contrat sans fin.")
         # Un manager devenu inactif entre-temps n'empêche pas la réactivation
         # (il sera signalé dans la qualité des données).
         if ancien.get("manager_id") == c.get("manager_id"):
             erreurs.pop("manager_id", None)
         if erreurs:
-            raise ErreurMetier("Réactivation impossible : corrigez les informations indiquées.", 400, erreurs=erreurs)
+            raise ErreurMetier(_("Réactivation impossible : corrigez les informations indiquées."), 400, erreurs=erreurs)
         nouveau = {**ancien, **{k: c[k] for k in CHAMPS_SAISIS},
                    "statut": "actif", "date_sortie": "", "motif_sortie": "", "commentaire_sortie": "",
                    "modifie_le": maintenant(), "modifie_par": ident["email"]}
@@ -263,8 +264,8 @@ def supprimer(store, id_, ident):
         c = _trouver(tous, id_, None)
         geres = [x for x in tous if x.get("manager_id") == id_ and x.get("statut") == "actif"]
         if geres:
-            raise ErreurMetier(f"Impossible : ce collaborateur est le manager de {len(geres)} collaborateur(s) actif(s). "
-                               "Changez d'abord leur manager.")
+            raise ErreurMetier(_("Impossible : ce collaborateur est le manager de {n} collaborateur(s) actif(s). "
+                                 "Changez d'abord leur manager.", n=len(geres)))
         tous.remove(c)
         for x in tous:
             if x.get("manager_id") == id_:
@@ -316,7 +317,7 @@ def generer(store, ident, etablissement):
         etab = idx["etablissements"].get((etablissement or "").upper()) or {}
         modele = (p["matricule"].get("modele") or "").upper()
         if ("{PAYS}" in modele or "{ETAB}" in modele) and not etab:
-            raise ErreurMetier("Choisissez d'abord l'établissement : il entre dans la composition du matricule.")
+            raise ErreurMetier(_("Choisissez d'abord l'établissement : il entre dans la composition du matricule."))
         utilises = [x.get("matricule") for x in collaborateurs(store)]
         matricule, prefixe, n = generer_matricule(p, utilises, pays=etab.get("pays", ""),
                                                   etablissement=etab.get("code", ""), annee=aujourd_hui().year)
@@ -338,7 +339,7 @@ def enregistrer_referentiel(store, type_, elements, ident):
         utilises = {c.get(champ) for c in collaborateurs(store) if champ and c.get(champ)}
         propre, erreurs = R.valider_liste(type_, elements, tous_refs, utilises)
         if erreurs:
-            raise ErreurMetier("Référentiel non enregistré.", 400, details=erreurs)
+            raise ErreurMetier(_("Référentiel non enregistré."), 400, details=erreurs)
         avant = {e["code"]: e for e in tous_refs.get(type_, [])}
         apres = {e["code"]: e for e in propre}
         resume = []
@@ -364,30 +365,30 @@ def enregistrer_parametres(store, brut, ident):
     for d in brut.get("domaines_email") or []:
         d = str(d).strip().lower().lstrip("@")
         if d and not re.match(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$", d):
-            erreurs["domaines_email"] = f"Domaine invalide : {d}"
+            erreurs["domaines_email"] = _("Domaine invalide : {d}", d=d)
         elif d and d not in domaines:
             domaines.append(d)
     if not domaines and "domaines_email" not in erreurs:
-        erreurs["domaines_email"] = "Au moins un domaine autorisé est requis."
+        erreurs["domaines_email"] = _("Au moins un domaine autorisé est requis.")
     m = brut.get("matricule") or {}
     modele = str(m.get("modele") or "").strip().upper()
     if not modele or "{N}" not in modele or not re.match(r"^([A-Z0-9_-]|\{PAYS\}|\{ETAB\}|\{AAAA\}|\{AA\}|\{N\})+$", modele) \
             or modele.count("{N}") != 1:
-        erreurs["modele"] = "Modèle invalide : lettres, chiffres, - et _ et les repères {PAYS}, {ETAB}, {AAAA}, {AA}, avec un seul {N}."
+        erreurs["modele"] = _("Modèle invalide : lettres, chiffres, - et _ et les repères {PAYS}, {ETAB}, {AAAA}, {AA}, avec un seul {N}.")
     try:
         largeur = int(m.get("largeur"))
         assert 3 <= largeur <= 12
     except (TypeError, ValueError, AssertionError):
-        erreurs["largeur"] = "Nombre de chiffres entre 3 et 12."
+        erreurs["largeur"] = _("Nombre de chiffres entre 3 et 12.")
         largeur = 6
     try:
         depart = int(m.get("depart") or 1)
         assert depart >= 1
     except (TypeError, ValueError, AssertionError):
-        erreurs["depart"] = "Numéro de départ : entier positif."
+        erreurs["depart"] = _("Numéro de départ : entier positif.")
         depart = 1
     if erreurs:
-        raise ErreurMetier("Paramètres non enregistrés.", 400, erreurs=erreurs)
+        raise ErreurMetier(_("Paramètres non enregistrés."), 400, erreurs=erreurs)
     with store.verrou:
         actuel = store.lire(S.FICHIER_PARAMETRES, {})
         regle = {**PARAMETRES_DEFAUT["matricule"], **(actuel.get("matricule") or {})}

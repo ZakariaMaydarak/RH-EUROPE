@@ -63,6 +63,10 @@ code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-siz
 .barre-haut-droite { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .lien-portail { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-soft); text-decoration: none; font-size: 13px; font-weight: 600; padding: 8px 12px; border-radius: 999px; min-height: 40px; }
 .lien-portail:hover { background: var(--neutre-fond); color: var(--ad-magenta-dark); }
+.choix-langue { position: relative; display: flex; align-items: center; }
+.choix-langue .icone { position: absolute; left: 11px; color: var(--ink-soft); pointer-events: none; }
+.choix-langue select { min-height: 40px; width: auto; padding: 6px 30px 6px 33px; border-radius: 999px; font-size: 13px; font-weight: 600; background-color: var(--surface); cursor: pointer; }
+.page-seule-haut { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .utilisateur { display: flex; align-items: center; gap: 10px; }
 .utilisateur-texte { display: flex; flex-direction: column; line-height: 1.2; }
 .utilisateur-texte strong { font-size: 13px; }
@@ -268,7 +272,10 @@ th[aria-sort=ascending] .tri, th[aria-sort=descending] .tri { color: var(--ad-ma
 th[aria-sort=ascending] .tri .icone, th[aria-sort=descending] .tri .icone { opacity: 1; }
 .tableau-edition td { padding: 6px 8px; }
 .tableau-edition input[type=text], .tableau-edition input:not([type]), .tableau-edition select { min-height: 38px; padding: 6px 10px; font-size: 14px; }
-.tableau-edition .col-libelle { width: 50%; min-width: 220px; }
+.tableau-edition td:first-child { min-width: 130px; }
+.tableau-edition .col-libelle { width: 30%; min-width: 200px; }
+.tableau-edition .col-traduction { min-width: 150px; }
+.tableau-edition .col-traduction input::placeholder { color: #B5B5C0; font-style: italic; }
 .ligne-inactive td { background: #FAFAFC; }
 .ligne-inactive input:not([type=checkbox]) { color: var(--muted); }
 .actions-ligne { white-space: nowrap; text-align: right; }
@@ -348,7 +355,9 @@ th[aria-sort=ascending] .tri .icone, th[aria-sort=descending] .tri .icone { opac
   .grille-3 { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .barre-haut { padding: 0 8px; }
+  .barre-haut { padding: 0 8px; gap: 6px; }
+  .barre-haut-droite { gap: 6px; }
+  .choix-langue select { padding-right: 24px; max-width: 128px; }
   .marque-texte span { display: none; }
   .entete-page h1 { font-size: 22px; }
   .grille-champs { grid-template-columns: 1fr; }
@@ -360,4 +369,7 @@ th[aria-sort=ascending] .tri .icone, th[aria-sort=descending] .tri .icone { opac
   .select-compact select { min-width: 0; }
   .entete-actions, .entete-actions > * { width: 100%; }
   .carte { padding: 16px; }
+}
+@media (max-width: 420px) {
+  .marque-texte { display: none; }
 }

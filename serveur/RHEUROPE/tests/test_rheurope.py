@@ -284,6 +284,54 @@ class TestApi(Base):
         self.assertIn("REC", " ".join(r.get_json()["details"]))
 
 
+class TestLangue(Base):
+    def setUp(self):
+        super().setUp()
+        self.h = {**self.comme("admin@adagio-city.com", "App.Admin")}
+
+    def test_messages_traduits_selon_l_entete(self):
+        SV.creer(self.store, fiche(), self.admin, None)
+        corps = {"collaborateur": fiche(nom="Durand", prenom="Paul", email="paul.durand@accor.com")}
+        r = self.client.post("/RHEUROPE/api/collaborateurs/verifier", json=corps, headers={**self.h, "X-Langue": "de"})
+        self.assertIn("Personalnummer EU000100", r.get_json()["erreurs"]["matricule"])
+        r = self.client.post("/RHEUROPE/api/collaborateurs/verifier", json=corps, headers={**self.h, "X-Langue": "en"})
+        self.assertIn("already assigned", r.get_json()["erreurs"]["matricule"])
+        r = self.client.post("/RHEUROPE/api/collaborateurs/verifier", json=corps, headers=self.h)
+        self.assertIn("déjà attribué", r.get_json()["erreurs"]["matricule"])
+
+    def test_preference_memorisee(self):
+        self.assertEqual(self.client.put("/RHEUROPE/api/me/langue", json={"langue": "xx"}, headers=self.h).status_code, 400)
+        self.client.put("/RHEUROPE/api/me/langue", json={"langue": "it"}, headers=self.h)
+        me = self.client.get("/RHEUROPE/api/me", headers=self.h).get_json()
+        self.assertEqual(me["langue"], "it")
+        self.assertIn("Italiano", me["langues"].values())
+        r = self.client.post("/RHEUROPE/api/collaborateurs/verifier", json={"collaborateur": {}}, headers=self.h)
+        self.assertEqual(r.get_json()["erreurs"]["nom"], "Campo obbligatorio.")   # préférence sans en-tête
+
+    def test_referentiels_traduits_mais_historique_et_export_en_francais(self):
+        c = SV.creer(self.store, fiche(), self.admin, None)
+        refs = self.client.get("/RHEUROPE/api/referentiels", headers=self.h).get_json()["referentiels"]
+        cdi = next(e for e in refs["types_contrat"] if e["code"] == "CDI")
+        self.assertEqual(cdi["traductions"]["de"], "Unbefristeter Vertrag")
+        t = self.client.get("/RHEUROPE/api/tableau-de-bord", headers={**self.h, "X-Langue": "es"}).get_json()
+        self.assertEqual(t["repartition"]["type_contrat"][0]["libelle"], "Contrato indefinido")
+        self.client.put(f"/RHEUROPE/api/collaborateurs/{c['id']}", json={"collaborateur": fiche(service="HEB")},
+                        headers={**self.h, "X-Langue": "en"})
+        self.assertEqual(self.store.historique()[-1]["changements"][0]["apres"], "Hébergement")
+        texte = self.client.get("/RHEUROPE/api/export?format=csv", headers={**self.h, "X-Langue": "de"}).data.decode("utf-8-sig")
+        self.assertIn(";CDI;CDI;", texte)
+        self.assertIn("Hébergement", texte)
+
+    def test_traductions_saisies_par_l_admin(self):
+        r = self.client.put("/RHEUROPE/api/referentiels/services", headers=self.h, json={"elements": [
+            {"code": "REC", "libelle": "Réception", "traductions": {"en": "Reception", "xx": "?"}},
+            {"code": "HEB", "libelle": "Hébergement", "traductions": {}}]})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        services = {e["code"]: e for e in SV.refs(self.store)["services"]}
+        self.assertEqual(services["REC"]["traductions"], {"en": "Reception"})
+        self.assertEqual(services["HEB"]["traductions"], {})   # vidées volontairement : pas de retour des valeurs par défaut
+
+
 if __name__ == "__main__":
     try:
         unittest.main(verbosity=1)

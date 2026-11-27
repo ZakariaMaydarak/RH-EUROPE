@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import { Bandeau, Chargement, EnTetePage, Icone, Statut } from '../composants.jsx'
+import { useT } from '../i18n.js'
 
 export default function Qualite() {
+  const { t } = useT()
   const [donnees, setDonnees] = useState(null)
   const [erreur, setErreur] = useState(null)
   const [ouvert, setOuvert] = useState(null)
@@ -14,13 +16,13 @@ export default function Qualite() {
 
   return (
     <>
-      <EnTetePage titre="Qualité des données" sousTitre="Contrôles de complétude et de cohérence sur toute l'Europe" />
+      <EnTetePage titre={t('Qualité des données')} sousTitre={t("Contrôles de complétude et de cohérence sur toute l'Europe")} />
       <div className="grille-kpi">
         <div className="carte kpi">
           <span className={`kpi-icone kpi-${taux >= 95 ? 'succes' : taux >= 80 ? 'alerte' : 'danger'}`}><Icone nom="qualite" taille={20} /></span>
-          <span className="kpi-texte"><span className="kpi-libelle">Fiches sans anomalie</span>
+          <span className="kpi-texte"><span className="kpi-libelle">{t('Fiches sans anomalie')}</span>
             <span className="kpi-valeur">{taux} %</span>
-            <span className="kpi-detail">{donnees.fiches_conformes} sur {donnees.total_collaborateurs}</span></span>
+            <span className="kpi-detail">{t('{n} sur {total}', { n: donnees.fiches_conformes, total: donnees.total_collaborateurs })}</span></span>
         </div>
       </div>
       <div className="liste-controles">
@@ -37,7 +39,7 @@ export default function Qualite() {
             {ouvert === ctl.code && (
               <div className="defilement-tableau">
                 <table className="tableau">
-                  <thead><tr><th scope="col">Matricule</th><th scope="col">Collaborateur</th><th scope="col">Établissement</th><th scope="col">Statut</th><th scope="col">Détail</th></tr></thead>
+                  <thead><tr><th scope="col">{t('Matricule')}</th><th scope="col">{t('Collaborateur')}</th><th scope="col">{t('Établissement')}</th><th scope="col">{t('Statut')}</th><th scope="col">{t('Détail')}</th></tr></thead>
                   <tbody>
                     {ctl.elements.map((x, i) => (
                       <tr key={x.id + i}>
@@ -50,7 +52,7 @@ export default function Qualite() {
                     ))}
                   </tbody>
                 </table>
-                {ctl.nb > ctl.elements.length && <p className="discret">{ctl.elements.length} premiers éléments affichés.</p>}
+                {ctl.nb > ctl.elements.length && <p className="discret">{t('{n} premiers éléments affichés.', { n: ctl.elements.length })}</p>}
               </div>
             )}
           </section>

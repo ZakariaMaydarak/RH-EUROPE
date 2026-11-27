@@ -80,7 +80,7 @@ def lignes(collaborateurs, refs, tous):
         manager = par_id.get(c.get("manager_id")) or {}
         calc = {
             "pays_code": etab.get("pays", ""),
-            "pays": R.libelle(idx, "pays", etab.get("pays")) if etab.get("pays") else "",
+            "pays": R.libelle(idx, "pays", etab.get("pays"), base=True) if etab.get("pays") else "",
             "manager_matricule": manager.get("matricule", ""),
             "manager_nom": f"{manager.get('nom', '')} {manager.get('prenom', '')}".strip(),
             "statut": "Actif" if c.get("statut") == "actif" else "Inactif",
@@ -93,7 +93,7 @@ def lignes(collaborateurs, refs, tous):
                 ligne[titre] = calc[source[1:]]
             elif source.startswith("@"):
                 type_, champ = source[1:].split(":")
-                ligne[titre] = R.libelle(idx, type_, c.get(champ)) if c.get(champ) else ""
+                ligne[titre] = R.libelle(idx, type_, c.get(champ), base=True) if c.get(champ) else ""
             elif source.startswith("#"):
                 ligne[titre] = c.get(source[1:]) or ""
             else:

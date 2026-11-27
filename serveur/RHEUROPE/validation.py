@@ -14,6 +14,7 @@ import unicodedata
 from datetime import date, timedelta
 
 from . import referentiels as R
+from .i18n import _
 
 CHAMPS = [
     ("nom", "Nom"),
@@ -118,17 +119,18 @@ def verifier(c, *, collaborateurs, refs, parametres, aujourd_hui, perimetre=None
         if champ == "manager_id" and manager_facultatif:
             continue
         if champ == "date_fin":
-            erreurs[champ] = f"Date de fin obligatoire pour un contrat « {type_contrat['libelle']} »."
+            erreurs[champ] = _("Date de fin obligatoire pour un contrat « {type} ».",
+                               type=R.libelle(idx, "types_contrat", type_contrat["code"]))
         else:
-            erreurs[champ] = "Champ obligatoire."
+            erreurs[champ] = _("Champ obligatoire.")
 
     # 2. Longueurs / caractères
     for champ in ("nom", "prenom"):
         v = c.get(champ, "")
         if v and len(v) > NOM_MAX:
-            erreurs[champ] = f"{LIBELLES[champ]} : {NOM_MAX} caractères maximum."
+            erreurs[champ] = _("{champ} : {n} caractères maximum.", champ=_(LIBELLES[champ]), n=NOM_MAX)
         elif v and re.search(r"[0-9@#$%*=<>{}\[\]|\\/;:!?]", v):
-            erreurs[champ] = f"{LIBELLES[champ]} : caractères non autorisés (chiffres ou symboles)."
+            erreurs[champ] = _("{champ} : caractères non autorisés (chiffres ou symboles).", champ=_(LIBELLES[champ]))
 
     # 3. Listes déroulantes (référentiels)
     for type_, champ in R.CHAMP_COLLABORATEUR.items():
@@ -136,22 +138,23 @@ def verifier(c, *, collaborateurs, refs, parametres, aujourd_hui, perimetre=None
             continue
         e = idx[type_].get(c[champ])
         if e is None:
-            erreurs[champ] = f"{LIBELLES[champ]} : valeur inconnue du référentiel."
+            erreurs[champ] = _("{champ} : valeur inconnue du référentiel.", champ=_(LIBELLES[champ]))
         elif not e.get("actif", True) and not (ancien and ancien.get(champ) == c[champ]):
-            erreurs[champ] = f"{LIBELLES[champ]} : « {e['libelle']} » est désactivé dans le référentiel."
+            erreurs[champ] = _("{champ} : « {valeur} » est désactivé dans le référentiel.",
+                               champ=_(LIBELLES[champ]), valeur=R.libelle(idx, type_, c[champ]))
 
     # 4. Établissement dans le périmètre de l'utilisateur
     if c.get("etablissement") and "etablissement" not in erreurs and perimetre is not None \
             and c["etablissement"] not in perimetre:
-        erreurs["etablissement"] = "Établissement hors de votre périmètre."
+        erreurs["etablissement"] = _("Établissement hors de votre périmètre.")
 
     # 5. Matricule : format + unicité Europe
     m = c.get("matricule")
     if m and "matricule" not in erreurs:
         if not MATRICULE_RE.match(m):
-            erreurs["matricule"] = "Matricule invalide : 3 à 20 caractères (lettres majuscules, chiffres, - et _)."
+            erreurs["matricule"] = _("Matricule invalide : 3 à 20 caractères (lettres majuscules, chiffres, - et _).")
         elif any((x.get("matricule") or "").upper() == m for x in autres):
-            erreurs["matricule"] = f"Le matricule {m} est déjà attribué à un autre collaborateur (Europe)."
+            erreurs["matricule"] = _("Le matricule {m} est déjà attribué à un autre collaborateur (Europe).", m=m)
 
     # 6. E-mail : format, domaine Accor, nominatif, unicité Europe
     em = c.get("email")
@@ -159,53 +162,55 @@ def verifier(c, *, collaborateurs, refs, parametres, aujourd_hui, perimetre=None
         domaines = parametres.get("domaines_email") or []
         local = em.split("@", 1)[0]
         if not EMAIL_RE.match(em):
-            erreurs["email"] = "Format d'adresse e-mail invalide."
+            erreurs["email"] = _("Format d'adresse e-mail invalide.")
         elif domaines and not domaine_autorise(em, domaines):
-            erreurs["email"] = "Domaine non autorisé : adresse attendue en " + ", ".join("@" + d for d in domaines) + "."
+            erreurs["email"] = _("Domaine non autorisé : adresse attendue en {domaines}.",
+                                 domaines=", ".join("@" + d for d in domaines))
         elif EMAIL_GENERIQUE_RE.match(local):
-            erreurs["email"] = "Adresse non nominative (boîte d'hôtel ou de service) : saisir l'adresse personnelle Accor du collaborateur."
+            erreurs["email"] = _("Adresse non nominative (boîte d'hôtel ou de service) : saisir l'adresse personnelle Accor du collaborateur.")
         elif any((x.get("email") or "").lower() == em for x in autres):
-            erreurs["email"] = "Cette adresse e-mail est déjà utilisée par un autre collaborateur (Europe)."
+            erreurs["email"] = _("Cette adresse e-mail est déjà utilisée par un autre collaborateur (Europe).")
         else:
             nom_simple = re.sub(r"[^a-z]", "", sans_accents(c.get("nom", "")).lower())
             local_simple = re.sub(r"[^a-z]", "", sans_accents(local))
             if nom_simple and len(nom_simple) >= 3 and nom_simple[:4] not in local_simple:
                 alertes.append({"type": "email_nom", "message":
-                                "L'adresse e-mail ne semble pas contenir le nom du collaborateur : vérifiez qu'il s'agit bien de la sienne."})
+                                _("L'adresse e-mail ne semble pas contenir le nom du collaborateur : vérifiez qu'il s'agit bien de la sienne.")})
 
     # 7. Dates : validité et cohérence
     for champ in ("date_naissance", "date_debut", "date_fin"):
         if c.get(champ) and date_iso(c[champ]) is None and champ not in erreurs:
-            erreurs[champ] = f"{LIBELLES[champ]} : date invalide."
+            erreurs[champ] = _("{champ} : date invalide.", champ=_(LIBELLES[champ]))
     naissance, debut, fin = date_iso(c.get("date_naissance")), date_iso(c.get("date_debut")), date_iso(c.get("date_fin"))
     if naissance and "date_naissance" not in erreurs:
         if naissance > aujourd_hui:
-            erreurs["date_naissance"] = "La date de naissance ne peut pas être dans le futur."
+            erreurs["date_naissance"] = _("La date de naissance ne peut pas être dans le futur.")
         elif naissance.year < 1900:
-            erreurs["date_naissance"] = "Date de naissance invalide."
+            erreurs["date_naissance"] = _("Date de naissance invalide.")
     if naissance and debut and "date_naissance" not in erreurs and "date_debut" not in erreurs:
         age = _age(naissance, debut)
         if age < AGE_MINIMUM:
-            erreurs["date_debut"] = f"Incohérence : le collaborateur aurait {age} ans au début du contrat (minimum {AGE_MINIMUM} ans)."
+            erreurs["date_debut"] = _("Incohérence : le collaborateur aurait {age} ans au début du contrat (minimum {min} ans).",
+                                      age=age, min=AGE_MINIMUM)
         elif age > AGE_MAXIMUM:
-            erreurs["date_naissance"] = f"Incohérence : le collaborateur aurait {age} ans au début du contrat."
+            erreurs["date_naissance"] = _("Incohérence : le collaborateur aurait {age} ans au début du contrat.", age=age)
     if debut and "date_debut" not in erreurs and debut > aujourd_hui + timedelta(days=366):
-        erreurs["date_debut"] = "Date de début à plus d'un an : vérifiez la saisie."
+        erreurs["date_debut"] = _("Date de début à plus d'un an : vérifiez la saisie.")
     if debut and fin and "date_fin" not in erreurs and fin < debut:
-        erreurs["date_fin"] = "La date de fin de contrat doit être postérieure ou égale à la date de début."
+        erreurs["date_fin"] = _("La date de fin de contrat doit être postérieure ou égale à la date de début.")
 
     # 8. Manager : collaborateur existant, actif, différent de soi
     mid = c.get("manager_id")
     if mid and "manager_id" not in erreurs:
         manager = next((x for x in collaborateurs if x.get("id") == mid), None)
         if manager is None:
-            erreurs["manager_id"] = "Manager introuvable dans la base."
+            erreurs["manager_id"] = _("Manager introuvable dans la base.")
         elif mon_id and mid == mon_id:
-            erreurs["manager_id"] = "Un collaborateur ne peut pas être son propre manager."
+            erreurs["manager_id"] = _("Un collaborateur ne peut pas être son propre manager.")
         elif manager.get("statut") != "actif" and not (ancien and ancien.get("manager_id") == mid):
-            erreurs["manager_id"] = "Ce manager est inactif : choisissez un collaborateur actif."
+            erreurs["manager_id"] = _("Ce manager est inactif : choisissez un collaborateur actif.")
         elif mon_id and _boucle_hierarchique(mon_id, mid, collaborateurs):
-            erreurs["manager_id"] = "Boucle hiérarchique : ce manager dépend lui-même de ce collaborateur."
+            erreurs["manager_id"] = _("Boucle hiérarchique : ce manager dépend lui-même de ce collaborateur.")
 
     # 9. Doublon potentiel (nom + prénom + date de naissance) — alerte
     cle = cle_doublon(c)
@@ -214,7 +219,7 @@ def verifier(c, *, collaborateurs, refs, parametres, aujourd_hui, perimetre=None
         if doublons:
             alertes.append({
                 "type": "doublon",
-                "message": "Doublon potentiel : un collaborateur avec les mêmes nom, prénom et date de naissance existe déjà.",
+                "message": _("Doublon potentiel : un collaborateur avec les mêmes nom, prénom et date de naissance existe déjà."),
                 "collaborateurs": [{"id": d["id"], "matricule": d.get("matricule"), "nom": d.get("nom"),
                                     "prenom": d.get("prenom"), "etablissement": d.get("etablissement"),
                                     "statut": d.get("statut")} for d in doublons[:5]],

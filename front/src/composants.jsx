@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useT } from './i18n.js'
 
 // Icônes SVG (tracés au trait, style Lucide) — jamais d'emoji comme icône.
 const TRACES = {
@@ -34,6 +35,7 @@ const TRACES = {
   menu: <><path d="M4 6h16M4 12h16M4 18h16" /></>,
   arrivee: <><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="m10 17 5-5-5-5" /><path d="M15 12H3" /></>,
   sablier: <><path d="M5 22h14M5 2h14" /><path d="M17 22v-4.2a2 2 0 0 0-.6-1.4L12 12l-4.4 4.4a2 2 0 0 0-.6 1.4V22" /><path d="M7 2v4.2a2 2 0 0 0 .6 1.4L12 12l4.4-4.4a2 2 0 0 0 .6-1.4V2" /></>,
+  globe: <><circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></>,
   inactif: <><circle cx="12" cy="12" r="10" /><path d="m4.9 4.9 14.2 14.2" /></>,
   actif: <><path d="M22 11.1V12a10 10 0 1 1-5.9-9.1" /><path d="m22 4-10 10-3-3" /></>,
 }
@@ -52,9 +54,10 @@ export function Badge({ ton = 'neutre', children, icone }) {
 }
 
 export function Statut({ statut }) {
+  const { t } = useT()
   return statut === 'actif'
-    ? <Badge ton="succes" icone="actif">Actif</Badge>
-    : <Badge ton="neutre" icone="inactif">Inactif</Badge>
+    ? <Badge ton="succes" icone="actif">{t('Actif')}</Badge>
+    : <Badge ton="neutre" icone="inactif">{t('Inactif')}</Badge>
 }
 
 export function Champ({ id, label, requis, erreur, aide, children, large }) {
@@ -79,6 +82,7 @@ export function Bouton({ variante = 'primaire', icone, children, chargement, dis
 }
 
 export function Modale({ titre, onFermer, children, actions, large }) {
+  const { t } = useT()
   const ref = useRef(null)
   useEffect(() => {
     const precedent = document.activeElement
@@ -106,7 +110,7 @@ export function Modale({ titre, onFermer, children, actions, large }) {
       <div className={`modale ${large ? 'modale-large' : ''}`} role="dialog" aria-modal="true" aria-labelledby="modale-titre" ref={ref}>
         <div className="modale-entete">
           <h2 id="modale-titre">{titre}</h2>
-          <button type="button" className="modale-fermer" onClick={onFermer} aria-label="Fermer"><Icone nom="fermer" /></button>
+          <button type="button" className="modale-fermer" onClick={onFermer} aria-label={t('Fermer')}><Icone nom="fermer" /></button>
         </div>
         <div className="modale-corps">{children}</div>
         {actions && <div className="modale-actions">{actions}</div>}
@@ -115,8 +119,9 @@ export function Modale({ titre, onFermer, children, actions, large }) {
   )
 }
 
-export function Chargement({ texte = 'Chargement…' }) {
-  return <div className="chargement" role="status"><span className="rond-chargement" aria-hidden="true" />{texte}</div>
+export function Chargement({ texte }) {
+  const { t } = useT()
+  return <div className="chargement" role="status"><span className="rond-chargement" aria-hidden="true" />{texte || t('Chargement…')}</div>
 }
 
 export function Vide({ icone = 'info', titre, children }) {
@@ -154,7 +159,8 @@ export function EnTetePage({ titre, sousTitre, actions, retour }) {
 
 // Barres horizontales (répartitions) : valeur et part affichées en texte, pas seulement en couleur.
 export function Barres({ donnees, total, onClic }) {
-  if (!donnees?.length) return <p className="discret">Aucune donnée.</p>
+  const { t } = useT()
+  if (!donnees?.length) return <p className="discret">{t('Aucune donnée.')}</p>
   const max = Math.max(...donnees.map((d) => d.nb), 1)
   const somme = total || donnees.reduce((s, d) => s + d.nb, 0)
   return (

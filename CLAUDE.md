@@ -66,6 +66,29 @@ Référentiel unique des collaborateurs des hôtels Adagio en Europe (Employee M
   (listes séparées par des virgules), 27 colonnes fixes (`export.COLONNES`), tracés.
 - Tests : `python serveur/RHEUROPE/tests/test_rheurope.py` (portail simulé, aussi en CI).
 
+### Langue (v1.1.0)
+
+- 5 langues : fr (référence), en, de, es, it. Sélecteur dans la barre du haut (toutes les
+  pages, y compris « aucun droit » et chargement), pour tous les profils. Choix gardé dans
+  le navigateur (`localStorage` `rheurope.langue`) ET côté serveur
+  (`DATA_DIR/RHEUROPE/preferences.json`, `PUT /api/me/langue`) : il suit l'utilisateur
+  d'un poste à l'autre. 1re visite : langue du navigateur si disponible, sinon français.
+- **Front** : `front/src/i18n.js` (contexte `useT()` : `t`, `tn` pour les pluriels, `ref` /
+  `nomRef` pour les libellés de référentiels, `date`, `dateHeure`, `nombre` selon la langue)
+  + `front/src/traductions.js` (clé = texte français, valeur = [en, de, es, it]). Tout texte
+  visible passe par `t('…')` ; une traduction absente affiche le français.
+- **Serveur** : `serveur/RHEUROPE/i18n.py` (`_()` + `CATALOGUE`, même principe). Langue de la
+  requête = en-tête `X-Langue` (ou `?langue=`), sinon préférence enregistrée, sinon fr.
+  Messages d'erreur, contrôles, indicateurs et qualité sont traduits.
+- **Référentiels** : chaque élément a `traductions` {en, de, es, it} (valeurs par défaut dans
+  `referentiels.TRADUCTIONS_DEFAUT`, modifiables page Référentiels ; `{}` = vidées
+  volontairement). `R.libelle(..., base=True)` = libellé français de référence.
+- **Restent en français** (données de référence pour les systèmes internes) : historique
+  enregistré (valeurs avant / après), exports Excel / CSV, noms d'établissements.
+- Ajout d'un texte : l'écrire en français dans `t('…')` / `_("…")` puis ajouter sa ligne dans
+  `traductions.js` / `i18n.CATALOGUE`. Contrôle des clés manquantes du front : extraire les
+  `t('…')` / `tn(…)` de `front/src` et comparer aux clés de `traductions.js`.
+
 ## Ce qu'on ne fait JAMAIS depuis ce dépôt
 
 - Modifier le dépôt `portail-apps` (le portail), ses fichiers `shared/`, ses

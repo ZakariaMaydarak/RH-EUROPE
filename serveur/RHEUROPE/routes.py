@@ -30,9 +30,11 @@ from shared import role_store
 from shared.auth import get_authenticated_user
 
 from . import export as X
+from . import i18n
 from . import indicateurs as I
 from . import referentiels as R
 from . import service as SV
+from .i18n import _
 from .store import FICHIER_AUTOMATISATION, Store
 
 SLUG = "RHEUROPE"
@@ -42,7 +44,7 @@ APP_METADATA = {
     "description": "Application web de gestion des collaborateurs des hôtels Adagio en Europe",
     "icon": "RH",
     "category": "Outils Adagio",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "required_role": "App.RHEUROPE",
     "role_schema": {
         "label": "Rôles HR EUROPE",
@@ -108,7 +110,7 @@ def _identite():
 def _exiger(*roles):
     ident = _identite()
     if ident["role"] not in roles:
-        abort(403, description="Action non autorisée pour votre profil.")
+        abort(403, description=_("Action non autorisée pour votre profil."))
     return ident
 
 
@@ -119,6 +121,27 @@ def _perimetre(ident):
 
 def _corps():
     return request.get_json(silent=True) or {}
+
+
+# --------------------------------------------------------------------------- #
+# Langue : en-tête X-Langue envoyé par le front (choix de l'utilisateur), sinon
+# préférence enregistrée, sinon français. Les messages d'erreur suivent.
+# --------------------------------------------------------------------------- #
+FICHIER_PREFERENCES = "preferences.json"
+
+
+def _langue_preferee(email):
+    return (store.lire(FICHIER_PREFERENCES, {}).get(email) or {}).get("langue")
+
+
+@bp.before_request
+def _choisir_langue():
+    demandee = (request.headers.get("X-Langue") or request.args.get("langue") or "").lower()
+    if demandee not in i18n.LANGUES:
+        user = get_authenticated_user(request.headers)
+        email = (user.get("name") or "").strip().lower()
+        demandee = _langue_preferee(email if "@" in email else "dev@local") or "fr"
+    i18n.definir(demandee)
 
 
 @bp.errorhandler(400)
@@ -143,8 +166,25 @@ def _erreur_metier(err):
 @bp.route("/api/me")
 def api_me():
     ident = _identite()
-    return jsonify({**ident, "role_libelle": ROLES.get(ident["role"], ident["role"]),
-                    "aujourd_hui": SV.aujourd_hui().isoformat()})
+    return jsonify({**ident, "role_libelle": _(ROLES.get(ident["role"], ident["role"])),
+                    "aujourd_hui": SV.aujourd_hui().isoformat(),
+                    "langue": _langue_preferee(ident["email"]), "langues": i18n.LANGUES})
+
+
+@bp.route("/api/me/langue", methods=["PUT"])
+def api_me_langue():
+    """Langue d'affichage choisie par l'utilisateur (tous profils), mémorisée côté
+    serveur pour la retrouver sur un autre poste."""
+    ident = _identite()
+    langue = str(_corps().get("langue") or "").lower()
+    if langue not in i18n.LANGUES:
+        abort(400, description=_("Langue non prise en charge."))
+    with store.verrou:
+        prefs = store.lire(FICHIER_PREFERENCES, {})
+        prefs.setdefault(ident["email"], {})["langue"] = langue
+        store.ecrire(FICHIER_PREFERENCES, prefs)
+    i18n.definir(langue)
+    return jsonify({"ok": True, "langue": langue})
 
 
 @bp.route("/api/etablissements/options")
@@ -165,7 +205,7 @@ def api_referentiels():
 def api_referentiel_enregistrer(type_):
     ident = _exiger("admin")
     if type_ not in R.TYPES:
-        abort(404, description="Référentiel inconnu.")
+        abort(404, description=_("Référentiel inconnu."))
     return jsonify({"ok": True, "elements": SV.enregistrer_referentiel(store, type_, _corps().get("elements"), ident)})
 
 
@@ -176,16 +216,16 @@ def api_import_etablissements():
     ident = _exiger("admin")
     fichier = request.files.get("fichier")
     if not fichier or not fichier.filename:
-        abort(400, description="Fichier manquant.")
+        abort(400, description=_("Fichier manquant."))
     contenu = fichier.read(5 * 1024 * 1024 + 1)
     if len(contenu) > 5 * 1024 * 1024:
-        abort(413, description="Fichier trop volumineux (5 Mo maximum).")
+        abort(413, description=_("Fichier trop volumineux (5 Mo maximum)."))
     try:
         lignes = _lire_tableau(fichier.filename, contenu)
     except Exception:  # noqa: BLE001
-        abort(400, description="Fichier illisible : utilisez un Excel (.xlsx) ou un CSV.")
+        abort(400, description=_("Fichier illisible : utilisez un Excel (.xlsx) ou un CSV."))
     if not lignes:
-        abort(400, description="Fichier vide.")
+        abort(400, description=_("Fichier vide."))
     entete = [_normal(h) for h in lignes[0]]
 
     def colonne(*noms):
@@ -195,7 +235,7 @@ def api_import_etablissements():
     i_nom = colonne("nom", "libelle", "name", "nometablissement", "hotel")
     i_pays = colonne("pays", "codepays", "country", "paysiso")
     if None in (i_code, i_nom, i_pays):
-        abort(400, description="Colonnes attendues : code, nom, pays (code ISO à 2 lettres ou nom du pays).")
+        abort(400, description=_("Colonnes attendues : code, nom, pays (code ISO à 2 lettres ou nom du pays)."))
     refs = SV.refs(store)
     pays_par_nom = {_normal(p["libelle"]): p["code"] for p in refs["pays"]}
     actuels = {e["code"]: dict(e) for e in refs["etablissements"]}
@@ -284,7 +324,7 @@ def api_collaborateur(id_):
     tous = SV.collaborateurs(store)
     c = next((x for x in tous if x["id"] == id_), None)
     if c is None or not SV.dans_perimetre(c, _perimetre(ident)):
-        abort(404, description="Collaborateur introuvable ou hors de votre périmètre.")
+        abort(404, description=_("Collaborateur introuvable ou hors de votre périmètre."))
     manager = next((x for x in tous if x["id"] == c.get("manager_id")), None)
     equipe = [_resume_manager(x) for x in tous if x.get("manager_id") == id_ and x.get("statut") == "actif"]
     historique = [e for e in reversed(store.historique()) if e.get("collaborateur_id") == id_][:100]
@@ -337,7 +377,7 @@ def api_reactiver(id_):
 def api_supprimer(id_):
     ident = _exiger("admin")
     if _corps().get("confirmation") != "EFFACER":
-        abort(400, description="Confirmation manquante : saisir EFFACER.")
+        abort(400, description=_("Confirmation manquante : saisir EFFACER."))
     SV.supprimer(store, id_, ident)
     return jsonify({"ok": True})
 
@@ -416,7 +456,7 @@ def api_export():
     ident = _exiger("admin")
     fmt = (request.args.get("format") or "xlsx").lower()
     if fmt not in ("xlsx", "csv"):
-        abort(400, description="Format attendu : xlsx ou csv.")
+        abort(400, description=_("Format attendu : xlsx ou csv."))
     filtres = {k: request.args.get(k) for k in ("pays", "etablissement", "service", "type_contrat", "statut")}
     tous, refs = SV.collaborateurs(store), SV.refs(store)
     choisis = X.filtrer(tous, refs, filtres)
@@ -455,7 +495,7 @@ def api_parametres():
 @bp.route("/api/utilisateurs", methods=["GET"])
 def api_utilisateurs():
     _exiger("admin")
-    return jsonify({"roles": ROLES, "utilisateurs": role_store.list_users(SLUG)})
+    return jsonify({"roles": {k: _(v) for k, v in ROLES.items()}, "utilisateurs": role_store.list_users(SLUG)})
 
 
 @bp.route("/api/utilisateurs", methods=["PUT"])
@@ -465,18 +505,18 @@ def api_utilisateur_enregistrer():
     email = str(corps.get("email") or "").strip().lower()
     role = corps.get("role")
     if not re.match(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", email):
-        abort(400, description="Adresse e-mail invalide.")
+        abort(400, description=_("Adresse e-mail invalide."))
     if role not in ROLES:
-        abort(400, description="Rôle inconnu.")
+        abort(400, description=_("Rôle inconnu."))
     connus = {e["code"] for e in SV.refs(store)["etablissements"]}
     sites = sorted({str(s).strip().upper() for s in corps.get("sites") or [] if str(s).strip()})
     inconnus = [s for s in sites if s not in connus]
     if inconnus:
-        abort(400, description="Établissements inconnus : " + ", ".join(inconnus))
+        abort(400, description=_("Établissements inconnus : {codes}", codes=", ".join(inconnus)))
     if role == "gm" and not sites:
-        abort(400, description="Un directeur d'hôtel doit avoir au moins un établissement.")
+        abort(400, description=_("Un directeur d'hôtel doit avoir au moins un établissement."))
     if email == ident["email"] and role != "admin":
-        abort(400, description="Vous ne pouvez pas retirer votre propre rôle d'administrateur.")
+        abort(400, description=_("Vous ne pouvez pas retirer votre propre rôle d'administrateur."))
     champs = {"role": role, "sites": sites if role == "gm" else [], "source": "manual"}
     if corps.get("name"):
         champs["name"] = str(corps["name"]).strip()[:120]
@@ -491,9 +531,9 @@ def api_utilisateur_supprimer(email):
     ident = _exiger("admin")
     email = email.strip().lower()
     if email == ident["email"]:
-        abort(400, description="Vous ne pouvez pas supprimer votre propre accès.")
+        abort(400, description=_("Vous ne pouvez pas supprimer votre propre accès."))
     if not role_store.delete_user(SLUG, email):
-        abort(404, description="Utilisateur inconnu.")
+        abort(404, description=_("Utilisateur inconnu."))
     SV.journaliser(store, ident, "utilisateur", detail=f"{email} : accès retiré")
     return jsonify({"ok": True})
 
@@ -567,9 +607,9 @@ if os.environ.get("PORTAIL_VALIDATION_DEPLOIEMENT") != "1" and os.environ.get("R
 @bp.route("/<path:path>")
 def servir(path):
     if path.startswith("api/"):
-        abort(404, description="Endpoint inconnu.")
+        abort(404, description=_("Endpoint inconnu."))
     if not os.path.isdir(BUILD_DIR):
-        abort(503, description="Front non construit : lancer deploiement/construire.ps1 (ou outils/lancer-en-local.ps1).")
+        abort(503, description=_("Front non construit : lancer deploiement/construire.ps1 (ou outils/lancer-en-local.ps1)."))
     demande = os.path.normpath(os.path.join(BUILD_DIR, path))
     if not demande.startswith(os.path.abspath(BUILD_DIR)):
         abort(403)
